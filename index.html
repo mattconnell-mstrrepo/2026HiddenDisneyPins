@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -293,6 +293,25 @@
             gap: 10px;
             flex-wrap: wrap;
         }
+
+        .tables-section { margin-top: 30px; }
+        .pin-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: white;
+        }
+        .pin-table th {
+            background: #4CAF50;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .pin-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        .pin-table tr:hover { background: #f5f5f5; }
         
         @media print {
             .tabs, .controls, .box-nav { display: none !important; }
@@ -322,6 +341,22 @@
                 </div>
                 
                 <div id="personal-pins-container"></div>
+
+                <div class="tables-section">
+                    <h2 style="margin-bottom: 15px;">Pin Pad Status</h2>
+                    
+                    <h3 style="color: #4CAF50; margin-top: 20px;">Pins On Pad</h3>
+                    <table class="pin-table" id="collected-table">
+                        <thead><tr><th>Series</th><th>Letter</th><th>Name</th><th>Type</th></tr></thead>
+                        <tbody id="collected-tbody"></tbody>
+                    </table>
+                    
+                    <h3 style="color: #f44336; margin-top: 30px;">Missing Pins</h3>
+                    <table class="pin-table" id="missing-table">
+                        <thead><tr><th>Series</th><th>Letter</th><th>Name</th><th>Type</th></tr></thead>
+                        <tbody id="missing-tbody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -540,34 +575,84 @@
                 
                 section.appendChild(grid);
                 
-                // Append inline stats at the bottom of the section
-                const totalColl = regColl + chColl + supColl;
-                const totalPins = regTot + chTot + supTot;
-                
+                // Construct the collapsible stats panel at the bottom of each series
                 const details = document.createElement('details');
                 details.className = 'series-stats';
-                details.innerHTML = `
-                    <summary>Series ${s} Stats: ${totalColl} / ${totalPins} Collected</summary>
-                    <div class="stats-text">
-                        <span><strong>Regular:</strong> ${regColl} / ${regTot}</span>
-                        <span><strong>Chasers:</strong> ${chColl} / ${chTot}</span>
-                        <span><strong>Super Chasers:</strong> ${supColl} / ${supTot}</span>
-                    </div>
-                `;
-                section.appendChild(details);
                 
+                if (isGlobal) {
+                    const totalGlobalPulls = boxes.length * 2;
+                    let seriesPulls = 0;
+                    
+                    let pinStatsHtml = seriesPins.map(p => {
+                        const pId = `${p.series}_${p.letter}_${p.name}`;
+                        let pulls = 0;
+                        boxes.forEach(b => { if(b.pin1 === pId) pulls++; if(b.pin2 === pId) pulls++; });
+                        seriesPulls += pulls;
+                        const prob = totalGlobalPulls > 0 ? ((pulls / totalGlobalPulls) * 100).toFixed(1) : 0;
+                        return `<span style="min-width: 150px;"><strong>${p.name}:</strong> ${pulls} pulls (${prob}%)</span>`;
+                    }).join('');
+                    
+                    const seriesProb = totalGlobalPulls > 0 ? ((seriesPulls / totalGlobalPulls) * 100).toFixed(1) : 0;
+                    
+                    details.innerHTML = `
+                        <summary>Series ${s} Pull Stats: ${seriesPulls} Total Pulls (${seriesProb}% Overall Rate)</summary>
+                        <div class="stats-text" style="flex-direction: column; gap: 8px; margin-top: 15px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                                ${pinStatsHtml}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    const totalColl = regColl + chColl + supColl;
+                    const totalPins = regTot + chTot + supTot;
+                    
+                    details.innerHTML = `
+                        <summary>Series ${s} Stats: ${totalColl} / ${totalPins} Collected</summary>
+                        <div class="stats-text">
+                            <span><strong>Regular:</strong> ${regColl} / ${regTot}</span>
+                            <span><strong>Chasers:</strong> ${chColl} / ${chTot}</span>
+                            <span><strong>Super Chasers:</strong> ${supColl} / ${supTot}</span>
+                        </div>
+                    `;
+                }
+                
+                section.appendChild(details);
                 container.appendChild(section);
             }
         }
         
         function renderPersonalCollection() {
             renderPinsGrid('personal-pins-container', false);
+            updateTables();
         }
         
         function renderGlobalStats() {
             renderBoxNav();
             renderActiveBoxArea();
             renderPinsGrid('global-pins-container', true);
+        }
+        
+        function updateTables() {
+            const collectedTbody = document.getElementById('collected-tbody');
+            const missingTbody = document.getElementById('missing-tbody');
+            
+            if (!collectedTbody || !missingTbody) return; // Failsafe
+            
+            collectedTbody.innerHTML = '';
+            missingTbody.innerHTML = '';
+            
+            pinsData.forEach(pin => {
+                const pinId = pin.series + '_' + pin.letter + '_' + pin.name;
+                const isCollected = personalCollection.has(pinId);
+                const typeText = pin.type === 'regular' ? 'Regular' : pin.type === 'chaser' ? 'Chaser' : 'Super Chaser';
+                const row = `<tr><td>Series ${pin.series}</td><td>${pin.letter}</td><td>${pin.name}</td><td>${typeText}</td></tr>`;
+                
+                if (isCollected) {
+                    collectedTbody.innerHTML += row;
+                } else {
+                    missingTbody.innerHTML += row;
+                }
+            });
         }
         
         // ---- Global Box Functionality ----
@@ -757,21 +842,24 @@
             pdfContainer.appendChild(tabContent);
             document.body.appendChild(pdfContainer);
 
-            // Dynamically set jsPDF format to the exact pixel width/height to force ONE single page output
-            const w = pdfContainer.offsetWidth;
-            const h = pdfContainer.offsetHeight;
+            // Wait a tiny bit for the browser to recalculate layout after expanding <details>
+            setTimeout(() => {
+                const w = pdfContainer.offsetWidth;
+                const h = pdfContainer.offsetHeight;
 
-            const opt = {
-                margin:       10,
-                filename:     'Hidden_Disney_2026_WaveA_Collection.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, windowWidth: w },
-                jsPDF:        { unit: 'px', format: [w + 20, Math.max(h + 20, w * 1.3)], orientation: 'portrait' }
-            };
+                // Using 1.5 scale and buffering the height calculation by 100px entirely prevents the second page bleed
+                const opt = {
+                    margin:       10,
+                    filename:     'Hidden_Disney_2026_WaveA_Collection.pdf',
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 1.5, useCORS: true, windowWidth: w },
+                    jsPDF:        { unit: 'px', format: [w + 20, h + 100], orientation: 'portrait' }
+                };
 
-            html2pdf().set(opt).from(pdfContainer).save().then(() => {
-                document.body.removeChild(pdfContainer); // Cleanup
-            });
+                html2pdf().set(opt).from(pdfContainer).save().then(() => {
+                    document.body.removeChild(pdfContainer); // Cleanup
+                });
+            }, 100);
         }
         
         function exportData() {

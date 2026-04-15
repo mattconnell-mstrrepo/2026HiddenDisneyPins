@@ -922,7 +922,7 @@
                 const pinId = pin.series + '_' + pin.letter + '_' + pin.name;
                 const isCollected = personalCollection.has(pinId);
                 const typeText = pin.type === 'regular' ? 'Regular' : pin.type === 'chaser' ? 'Chaser' : 'Super Chaser';
-                const row = `<tr><td>Series ${pin.series}</td><td>${pin.letter}</td><td>${pin.name}</td><td>${typeText}</td></tr>`;
+                const row = `<tr><td>Series ${pin.series}: ${seriesNames[pin.series]}</td><td>${pin.letter}</td><td>${pin.name}</td><td>${typeText}</td></tr>`;
                 
                 if (isCollected) {
                     collectedTbody.innerHTML += row;
